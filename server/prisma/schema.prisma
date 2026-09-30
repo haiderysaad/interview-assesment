@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum RoundType {
+  APTITUDE
+  TECHNICAL
+  AI_INTERVIEW
+}
+
+enum SessionStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+model InterviewSession {
+  id          String        @id @default(uuid())
+  title       String
+  role        String
+  description String?
+  startsAt    DateTime
+  endsAt      DateTime
+  status      SessionStatus @default(DRAFT)
+  proctoring  Json          @default("{}")
+  createdAt   DateTime      @default(now())
+  rounds      Round[]
+  candidates  Candidate[]
+}
+
+model Round {
+  id          String             @id @default(uuid())
+  sessionId   String
+  session     InterviewSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  type        RoundType
+  order       Int
+  durationMin Int
+  questions   AptitudeQuestion[]
+
+  @@unique([sessionId, order])
+}
+
+model AptitudeQuestion {
+  id            String   @id @default(uuid())
+  roundId       String
+  round         Round    @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  text          String
+  options       String[]
+  correct       Int[]
+  marks         Int      @default(1)
+  negativeMarks Float    @default(0)
+}
+
+model Candidate {
+  id         String           @id @default(uuid())
+  sessionId  String
+  session    InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  name       String
+  email      String
+  token      String           @unique @default(uuid())
+  createdAt  DateTime         @default(now())
+  violations Violation[]
+
+  @@unique([sessionId, email])
+}
+
+model Violation {
+  id          String    @id @default(uuid())
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  type        String
+  meta        Json?
+  at          DateTime  @default(now())
+}

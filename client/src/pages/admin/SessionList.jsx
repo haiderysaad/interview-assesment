@@ -1,0 +1,43 @@
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { api } from "../../api";
+
+export default function SessionList() {
+  const [sessions, setSessions] = useState([]);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api("/sessions").then(setSessions).catch((e) => setError(e.message));
+  }, []);
+
+  return (
+    <div className="page">
+      <div className="row">
+        <h1>Interview Sessions</h1>
+        <Link className="btn" to="/admin/sessions/new">+ New session</Link>
+      </div>
+      {error && <p className="error">{error}</p>}
+      <table>
+        <thead>
+          <tr><th>Title</th><th>Role</th><th>Rounds</th><th>Window</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          {sessions.map((s) => (
+            <tr key={s.id}>
+              <td>{s.title}</td>
+              <td>{s.role}</td>
+              <td>{s.rounds.map((r) => r.type).join(" → ")}</td>
+              <td>
+                {new Date(s.startsAt).toLocaleString()} – {new Date(s.endsAt).toLocaleString()}
+              </td>
+              <td>{s.status}</td>
+            </tr>
+          ))}
+          {sessions.length === 0 && (
+            <tr><td colSpan="5">No sessions yet.</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
