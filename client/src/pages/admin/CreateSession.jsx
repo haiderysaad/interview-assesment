@@ -33,7 +33,7 @@ export default function CreateSession() {
     e.preventDefault();
     setError("");
     try {
-      await api("/sessions", {
+      const session = await api("/sessions", {
         method: "POST",
         body: {
           ...form,
@@ -46,7 +46,14 @@ export default function CreateSession() {
           proctoring,
         },
       });
-      navigate("/admin");
+      const aptitudeRound = session.rounds.find(
+        (round) => round.type === "APTITUDE",
+      );
+      navigate(
+        aptitudeRound
+          ? `/admin/sessions/${session.id}/aptitude`
+          : "/admin",
+      );
     } catch (err) {
       setError(err.message);
     }
