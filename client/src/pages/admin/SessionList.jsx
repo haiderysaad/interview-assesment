@@ -19,7 +19,7 @@ export default function SessionList() {
       {error && <p className="error">{error}</p>}
       <table>
         <thead>
-          <tr><th>Title</th><th>Role</th><th>Rounds</th><th>Window</th><th>Status</th></tr>
+          <tr><th>Title</th><th>Role</th><th>Rounds</th><th>Window</th><th>Status</th><th></th></tr>
         </thead>
         <tbody>
           {sessions.map((s) => (
@@ -31,10 +31,15 @@ export default function SessionList() {
                 {new Date(s.startsAt).toLocaleString()} – {new Date(s.endsAt).toLocaleString()}
               </td>
               <td>{s.status}</td>
+              <td>
+                {s.rounds.some((r) => r.type === "APTITUDE") && (
+                  <Link to={`/admin/sessions/${s.id}/aptitude`}>Edit aptitude questions</Link>
+                )}
+              </td>
             </tr>
           ))}
           {sessions.length === 0 && (
-            <tr><td colSpan="5">No sessions yet.</td></tr>
+            <tr><td colSpan="6">No sessions yet.</td></tr>
           )}
         </tbody>
       </table>

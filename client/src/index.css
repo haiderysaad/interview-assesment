@@ -8,3 +8,9 @@ input, textarea { padding: 8px; border: 1px solid #ccc; border-radius: 6px; font
 table { width: 100%; border-collapse: collapse; background: #fff; }
 th, td { text-align: left; padding: 10px; border-bottom: 1px solid #eee; font-size: 14px; }
 .error { color: #b91c1c; }
+
+.card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.row-tight { display: flex; gap: 6px; }
+.ghost { background: transparent; border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; cursor: pointer; align-self: flex-start; }
+.success { color: #15803d; }
+select { padding: 8px; border: 1px solid #ccc; border-radius: 6px; font: inherit; }
