@@ -11,6 +11,15 @@ const emptyChecks = {
   screenShare: false,
 };
 
+function hasFullscreen() {
+  return Boolean(document.fullscreenElement);
+}
+
+function hasLiveVideo(stream) {
+  const track = stream?.getVideoTracks()[0];
+  return Boolean(track && track.readyState === "live" && !track.muted);
+}
+
 export default function TakeTest() {
   const { token } = useParams();
   const [info, setInfo] = useState(null);
@@ -67,7 +76,7 @@ export default function TakeTest() {
       if (!info?.proctoring.fullscreenRequired) return;
       setChecks((current) => ({
         ...current,
-        fullscreen: Boolean(document.fullscreenElement),
+        fullscreen: hasFullscreen(),
       }));
     };
 
@@ -108,14 +117,54 @@ export default function TakeTest() {
       throw new Error(kind === "webcam" ? "Camera access is required." : "Screen sharing is required.");
     }
 
-    track.addEventListener(
-      "ended",
-      () => {
-        setChecks((current) => ({ ...current, [kind]: false }));
-      },
-      { once: true },
-    );
+    const updateTrackState = () => {
+      const active = track.readyState === "live" && !track.muted;
+      setChecks((current) => {
+        if (current[kind] === active) return current;
+        return { ...current, [kind]: active };
+      });
+    };
+    for (const eventName of ["ended", "mute", "unmute"]) {
+      track.addEventListener(eventName, updateTrackState);
+    }
+    updateTrackState();
   }
+
+  function getCurrentChecks() {
+    return {
+      fullscreen: hasFullscreen(),
+      webcam: hasLiveVideo(webcamStream.current),
+      screenShare:
+        hasLiveVideo(screenStream.current) &&
+        screenStream.current
+          .getVideoTracks()[0]
+          .getSettings().displaySurface === "monitor",
+    };
+  }
+
+  function missingCurrentRequirements() {
+    return info
+      ? requiredChecks(info.proctoring, getCurrentChecks())
+      : [];
+  }
+
+  useEffect(() => {
+    if (phase !== "test") return undefined;
+
+    const refreshRequirementState = () => {
+      const current = getCurrentChecks();
+      setChecks((previous) =>
+        previous.fullscreen === current.fullscreen &&
+        previous.webcam === current.webcam &&
+        previous.screenShare === current.screenShare
+          ? previous
+          : current,
+      );
+    };
+    const interval = window.setInterval(refreshRequirementState, 250);
+    refreshRequirementState();
+    return () => window.clearInterval(interval);
+  }, [phase, info]);
 
   async function requestRequirements(required) {
     const requests = {};
@@ -215,16 +264,7 @@ export default function TakeTest() {
 
   async function start() {
     if (preparing) return;
-    const currentChecks = {
-      ...checks,
-      fullscreen: Boolean(document.fullscreenElement),
-      webcam:
-        !info.proctoring.webcamRequired ||
-        webcamStream.current?.getVideoTracks().some((track) => track.readyState === "live"),
-      screenShare:
-        !info.proctoring.screenShareRequired ||
-        screenStream.current?.getVideoTracks().some((track) => track.readyState === "live"),
-    };
+    const currentChecks = getCurrentChecks();
     const missing = requiredChecks(info.proctoring, currentChecks);
     if (missing.length > 0) {
       setChecks(currentChecks);
@@ -267,8 +307,7 @@ export default function TakeTest() {
 
   async function submit(askFirst) {
     if (submittedRef.current || submitting) return;
-    const missingRequirements = requiredChecks(info.proctoring, checks);
-    if (askFirst && missingRequirements.length > 0) {
+    if (missingCurrentRequirements().length > 0) {
       setError("Restore the required browser permissions before submitting.");
       return;
     }
@@ -359,6 +398,7 @@ export default function TakeTest() {
   }
 
   function choose(question, optionId) {
+    if (missingCurrentRequirements().length > 0) return;
     const current = answersRef.current[question.id] || [];
     const selected =
       question.type === "SINGLE"
@@ -372,33 +412,42 @@ export default function TakeTest() {
   }
 
   function clearAnswer(question) {
+    if (missingCurrentRequirements().length > 0) return;
     const updated = { ...answersRef.current };
     delete updated[question.id];
     updateAnswers(updated);
   }
 
-  const missingRequirements = info
-    ? requiredChecks(info.proctoring, checks)
-    : [];
+  const missingRequirements = missingCurrentRequirements();
+  const permissionBlocked = missingRequirements.length > 0;
   const permissionItems = info
     ? [
-        {
-          kind: "fullscreen",
-          label: "Fullscreen mode",
-          required: info.proctoring.fullscreenRequired,
-          active: checks.fullscreen,
-        },
         {
           kind: "webcam",
           label: "Webcam access",
           required: info.proctoring.webcamRequired,
           active: checks.webcam,
+          action: "Enable camera",
+          canEnable: true,
         },
         {
           kind: "screenShare",
           label: "Share your entire screen",
           required: info.proctoring.screenShareRequired,
           active: checks.screenShare,
+          action: "Share screen",
+          canEnable:
+            !info.proctoring.webcamRequired || checks.webcam,
+        },
+        {
+          kind: "fullscreen",
+          label: "Fullscreen mode",
+          required: info.proctoring.fullscreenRequired,
+          active: checks.fullscreen,
+          action: "Enter fullscreen",
+          canEnable:
+            (!info.proctoring.webcamRequired || checks.webcam) &&
+            (!info.proctoring.screenShareRequired || checks.screenShare),
         },
       ].filter((item) => item.required)
     : [];
@@ -488,11 +537,20 @@ export default function TakeTest() {
             {Object.values(info.proctoring).some(Boolean) && (
               <div className="candidate-permission-notice">
                 <strong>Required before you begin</strong>
+                <p className="candidate-permission-copy">
+                  Set up camera and screen sharing first. Enter fullscreen last;
+                  the screen-sharing picker may exit fullscreen.
+                </p>
                 {permissionItems.length > 0 && (
                   <ul className="candidate-permission-list">
-                    {permissionItems.map((item) => (
+                    {permissionItems.map((item, index) => (
                       <li key={item.kind}>
-                        <span>{item.label}</span>
+                        <span className="candidate-permission-step">
+                          <span className="candidate-permission-step-number">
+                            {index + 1}
+                          </span>
+                          {item.label}
+                        </span>
                         <span className={item.active ? "is-ready" : "is-needed"}>
                           {item.active ? "Ready" : "Required"}
                         </span>
@@ -503,9 +561,9 @@ export default function TakeTest() {
                             onClick={() =>
                               restoreRequirement(item.kind)
                             }
-                            disabled={preparing}
+                            disabled={preparing || !item.canEnable}
                           >
-                            {preparing ? "Waiting…" : "Enable"}
+                            {preparing ? "Waiting…" : item.action}
                           </button>
                         )}
                       </li>
@@ -568,7 +626,11 @@ export default function TakeTest() {
 
   return (
     <main className="candidate-shell candidate-test-shell">
-      <header className="candidate-test-header">
+      <header
+        className="candidate-test-header"
+        inert={permissionBlocked}
+        aria-hidden={permissionBlocked}
+      >
         <div className="candidate-test-header-inner">
           <div className="candidate-test-heading">
             <span className="candidate-eyebrow">APTITUDE ASSESSMENT</span>
@@ -593,7 +655,11 @@ export default function TakeTest() {
         </div>
       </header>
 
-      <div className="candidate-form candidate-active-form">
+      <div
+        className="candidate-form candidate-active-form"
+        inert={permissionBlocked}
+        aria-hidden={permissionBlocked}
+      >
         <section className="candidate-title-card candidate-active-title">
           <div className="candidate-title-accent" />
           <div className="candidate-title-content">
@@ -639,6 +705,7 @@ export default function TakeTest() {
                     type={question.type === "SINGLE" ? "radio" : "checkbox"}
                     name={`answer-${question.id}`}
                     checked={(answers[question.id] || []).includes(option.id)}
+                    disabled={permissionBlocked}
                     onChange={() => choose(question, option.id)}
                   />
                   <span>{option.text}</span>
@@ -649,6 +716,7 @@ export default function TakeTest() {
               <button
                 className="candidate-clear-answer"
                 type="button"
+                disabled={permissionBlocked}
                 onClick={() => clearAnswer(question)}
               >
                 Clear answer
@@ -664,7 +732,7 @@ export default function TakeTest() {
             className="candidate-primary-button"
             type="button"
             onClick={() => submit(true)}
-            disabled={submitting}
+            disabled={submitting || permissionBlocked}
           >
             {submitting ? "Submitting…" : "Submit test"}
           </button>

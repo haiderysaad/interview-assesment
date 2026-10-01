@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../../api";
 
 export default function SessionDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [session, setSession] = useState(null);
   const [results, setResults] = useState(null);
   const [error, setError] = useState("");
   const [form, setForm] = useState({ name: "", email: "" });
   const [copied, setCopied] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const [reloadKey, setReloadKey] = useState(0);
   const load = () => {
@@ -79,6 +81,23 @@ export default function SessionDetail() {
     }
   }
 
+  async function deleteSession() {
+    const confirmed = window.confirm(
+      `Permanently delete "${session.title}"? This also deletes its questions, candidates, test links, and results.`,
+    );
+    if (!confirmed || deleting) return;
+
+    setDeleting(true);
+    setError("");
+    try {
+      await api(`/sessions/${id}`, { method: "DELETE" });
+      navigate("/admin", { replace: true });
+    } catch (deleteError) {
+      setError(deleteError.message);
+      setDeleting(false);
+    }
+  }
+
   async function copyLink(token) {
     const link = `${window.location.origin}/test/${token}`;
     try {
@@ -129,6 +148,14 @@ export default function SessionDetail() {
           <button className="btn" type="button" onClick={() => setStatus("CLOSED")}>Close session</button>
         )}
         <button className="ghost" type="button" onClick={load}>Refresh</button>
+        <button
+          className="ghost danger-button"
+          type="button"
+          onClick={deleteSession}
+          disabled={deleting}
+        >
+          {deleting ? "Deleting…" : "Delete session"}
+        </button>
       </div>
       {session.status === "DRAFT" && (
         <p>Candidate links only work after you publish. {results.questionCount} question(s) saved.</p>

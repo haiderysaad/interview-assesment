@@ -6,6 +6,7 @@ export default function SessionList() {
   const [sessions, setSessions] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState("");
 
   useEffect(() => {
     api("/sessions")
@@ -13,6 +14,26 @@ export default function SessionList() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
+
+  async function deleteSession(session) {
+    const confirmed = window.confirm(
+      `Permanently delete "${session.title}"? This also deletes its questions, candidates, test links, and results.`,
+    );
+    if (!confirmed || deletingId) return;
+
+    setDeletingId(session.id);
+    setError("");
+    try {
+      await api(`/sessions/${session.id}`, { method: "DELETE" });
+      setSessions((current) =>
+        current.filter((item) => item.id !== session.id),
+      );
+    } catch (deleteError) {
+      setError(deleteError.message);
+    } finally {
+      setDeletingId("");
+    }
+  }
 
   return (
     <div className="page">
@@ -36,10 +57,20 @@ export default function SessionList() {
               </td>
               <td>{s.status}</td>
               <td>
-                                <Link to={`/admin/sessions/${s.id}`}>Manage</Link>{" "}
+                <div className="row-tight">
+                  <Link to={`/admin/sessions/${s.id}`}>Manage</Link>
                 {s.rounds.some((r) => r.type === "APTITUDE") && (
                   <Link to={`/admin/sessions/${s.id}/aptitude`}>Edit aptitude questions</Link>
                 )}
+                  <button
+                    className="ghost danger-button"
+                    type="button"
+                    disabled={Boolean(deletingId)}
+                    onClick={() => deleteSession(s)}
+                  >
+                    {deletingId === s.id ? "Deleting…" : "Delete"}
+                  </button>
+                </div>
               </td>
             </tr>
           ))}

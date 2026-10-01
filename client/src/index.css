@@ -12,6 +12,9 @@ th, td { text-align: left; padding: 10px; border-bottom: 1px solid #eee; font-si
 .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
 .row-tight { display: flex; gap: 6px; }
 .ghost { background: transparent; border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; cursor: pointer; align-self: flex-start; }
+.danger-button { color: #b3261e; border-color: #e4b8b6; }
+.danger-button:hover:not(:disabled) { background: #fcebea; }
+.danger-button:disabled { cursor: wait; opacity: 0.6; }
 .success { color: #15803d; }
 select { padding: 8px; border: 1px solid #ccc; border-radius: 6px; font: inherit; }
 
@@ -827,11 +830,30 @@ select { padding: 8px; border: 1px solid #ccc; border-radius: 6px; font: inherit
 .candidate-permission-list li {
   min-height: 38px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   border-top: 1px solid #e9e2f2;
   color: #3c4043;
+}
+
+.candidate-permission-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.candidate-permission-step-number {
+  width: 21px;
+  height: 21px;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: #eee7f8;
+  color: #673ab7;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .candidate-permission-list .is-ready,

@@ -5,6 +5,17 @@ import { GRACE_MS, deadlineOf, finalizeAttempt } from "../attempts.js";
 // Admin-only (mounted behind requireAdmin)
 const router = Router();
 
+router.delete("/:id", async (req, res) => {
+  const session = await prisma.interviewSession.findUnique({
+    where: { id: req.params.id },
+    select: { id: true },
+  });
+  if (!session) return res.status(404).json({ error: "Session not found" });
+
+  await prisma.interviewSession.delete({ where: { id: session.id } });
+  res.json({ ok: true });
+});
+
 router.patch("/:id/status", async (req, res) => {
   const { status } = req.body ?? {};
   if (!["PUBLISHED", "CLOSED"].includes(status))
