@@ -11,6 +11,7 @@ const ROUND_TYPES = [
 export default function CreateSession() {
   const navigate = useNavigate();
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
     title: "", role: "", description: "", startsAt: "", endsAt: "",
   });
@@ -31,7 +32,9 @@ export default function CreateSession() {
 
   async function submit(e) {
     e.preventDefault();
+    if (submitting) return;
     setError("");
+    setSubmitting(true);
     try {
       const session = await api("/sessions", {
         method: "POST",
@@ -56,6 +59,8 @@ export default function CreateSession() {
       );
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -65,12 +70,12 @@ export default function CreateSession() {
       <h1>New interview session</h1>
       {error && <p className="error">{error}</p>}
 
-      <label>Title<input name="title" value={form.title} onChange={setField} /></label>
-      <label>Role<input name="role" value={form.role} onChange={setField} placeholder="e.g. Backend Developer" /></label>
+      <label>Title<input name="title" value={form.title} onChange={setField} required /></label>
+      <label>Role<input name="role" value={form.role} onChange={setField} placeholder="e.g. Backend Developer" required /></label>
       <label>Description<textarea name="description" value={form.description} onChange={setField} /></label>
       <div className="row">
-        <label>Opens at<input type="datetime-local" name="startsAt" value={form.startsAt} onChange={setField} /></label>
-        <label>Closes at<input type="datetime-local" name="endsAt" value={form.endsAt} onChange={setField} /></label>
+        <label>Opens at<input type="datetime-local" name="startsAt" value={form.startsAt} onChange={setField} required /></label>
+        <label>Closes at<input type="datetime-local" name="endsAt" value={form.endsAt} onChange={setField} required /></label>
       </div>
 
       <h2>Rounds (in order)</h2>
@@ -117,7 +122,7 @@ export default function CreateSession() {
         />
       </label>
 
-      <button className="btn" type="submit">Create session</button>
+      <button className="btn" type="submit" disabled={submitting}>{submitting ? "Creating…" : "Create session"}</button>
     </form>
   );
 }

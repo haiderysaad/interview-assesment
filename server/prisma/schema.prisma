@@ -49,6 +49,7 @@ model Round {
   shuffleQuestions Boolean @default(false)
   shuffleOptions   Boolean @default(false)
   questions   AptitudeQuestion[]
+  attempts    Attempt[]
 
   @@unique([sessionId, order])
 }
@@ -57,8 +58,6 @@ model AptitudeQuestion {
   id            String   @id @default(uuid())
   roundId       String
   round         Round    @relation(fields: [roundId], references: [id], onDelete: Cascade)
-  type          QuestionType @default(SINGLE)
-  order         Int          @default(0)
   type          QuestionType @default(SINGLE)
   order         Int          @default(0)
   text          String
@@ -77,6 +76,7 @@ model Candidate {
   token      String           @unique @default(uuid())
   createdAt  DateTime         @default(now())
   violations Violation[]
+  attempts   Attempt[]
 
   @@unique([sessionId, email])
 }
@@ -88,4 +88,21 @@ model Violation {
   type        String
   meta        Json?
   at          DateTime  @default(now())
+}
+
+model Attempt {
+  id            String    @id @default(uuid())
+  candidateId   String
+  candidate     Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  roundId       String
+  round         Round     @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  startedAt     DateTime  @default(now())
+  submittedAt   DateTime?
+  autoSubmitted Boolean   @default(false)
+  answers       Json      @default("{}")
+  score         Float?
+  totalMarks    Int?
+  correctCount  Int?
+
+  @@unique([candidateId, roundId])
 }

@@ -63,6 +63,16 @@ export default function AptitudeBuilder() {
     };
   }, [id]);
 
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
   const markChanged = () => {
     setDirty(true);
     setMessage({ text: "", error: false });
@@ -198,7 +208,7 @@ export default function AptitudeBuilder() {
       await api(`/sessions/${id}/rounds/${round.id}/questions`, {
         method: "PUT",
         body: {
-          questions: questions.map(({ key: _key, ...question }) => question),
+          questions: questions.map(({ key: _key, id: _id, roundId: _roundId, ...question }) => question),
           ...shuffle,
         },
       });

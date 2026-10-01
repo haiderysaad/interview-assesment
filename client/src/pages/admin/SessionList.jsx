@@ -5,9 +5,13 @@ import { api } from "../../api";
 export default function SessionList() {
   const [sessions, setSessions] = useState([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api("/sessions").then(setSessions).catch((e) => setError(e.message));
+    api("/sessions")
+      .then(setSessions)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -32,13 +36,14 @@ export default function SessionList() {
               </td>
               <td>{s.status}</td>
               <td>
+                                <Link to={`/admin/sessions/${s.id}`}>Manage</Link>{" "}
                 {s.rounds.some((r) => r.type === "APTITUDE") && (
                   <Link to={`/admin/sessions/${s.id}/aptitude`}>Edit aptitude questions</Link>
                 )}
               </td>
             </tr>
           ))}
-          {sessions.length === 0 && (
+          {!loading && !error && sessions.length === 0 && (
             <tr><td colSpan="6">No sessions yet.</td></tr>
           )}
         </tbody>
