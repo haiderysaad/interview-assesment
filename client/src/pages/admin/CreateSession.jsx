@@ -26,6 +26,7 @@ export default function CreateSession() {
     screenShareRequired: true,
     blockCopyPaste: true,
     maxTabSwitches: 3,
+    maxFullscreenExits: 1,
   });
 
   const setField = (e) => setForm({ ...form, [e.target.name]: e.target.value });
@@ -114,13 +115,22 @@ export default function CreateSession() {
           {label}
         </label>
       ))}
-      <label>Max tab switches before auto-flag
+      <label>Max tab switches before auto-flag (0 = removed on first)
         <input
           type="number" min="0" style={{ width: 80 }}
           value={proctoring.maxTabSwitches}
           onChange={(e) => setProctoring({ ...proctoring, maxTabSwitches: Number(e.target.value) })}
         />
       </label>
+      {proctoring.fullscreenRequired && (
+        <label>Max fullscreen exits before auto-flag (0 = removed on first)
+          <input
+            type="number" min="0" style={{ width: 80 }}
+            value={proctoring.maxFullscreenExits}
+            onChange={(e) => setProctoring({ ...proctoring, maxFullscreenExits: Number(e.target.value) })}
+          />
+        </label>
+      )}
 
       <button className="btn" type="submit" disabled={submitting}>{submitting ? "Creating…" : "Create session"}</button>
     </form>

@@ -32,6 +32,12 @@ export default function TakeTest() {
   const [submitting, setSubmitting] = useState(false);
   const [checks, setChecks] = useState(emptyChecks);
   const [preparing, setPreparing] = useState(false);
+  const [consent, setConsent] = useState(false);
+  const [removedReason, setRemovedReason] = useState("");
+  const [warning, setWarning] = useState("");
+  const awayRef = useRef(false);
+  const blurGuard = useRef(false);
+  const disqualifyRef = useRef(() => {});
   const webcamStream = useRef(null);
   const screenStream = useRef(null);
   const deadline = useRef(0);
@@ -47,7 +53,8 @@ export default function TakeTest() {
       .then((data) => {
         if (!active) return;
         setInfo(data);
-        setPhase(data.state === "SUBMITTED" ? "done" : "intro");
+        if (data.removed) setRemovedReason("EARLIER");
+        setPhase(data.removed ? "removed" : data.state === "SUBMITTED" ? "done" : "intro");
       })
       .catch((loadError) => {
         if (!active) return;
@@ -88,10 +95,14 @@ export default function TakeTest() {
   useEffect(() => {
     if (phase !== "test" || !info?.proctoring.blockCopyPaste) return undefined;
 
-    const preventClipboard = (event) => event.preventDefault();
+    const preventClipboard = (event) => {
+      event.preventDefault();
+      disqualifyRef.current("COPY_PASTE");
+    };
     const preventClipboardShortcuts = (event) => {
       if ((event.ctrlKey || event.metaKey) && ["c", "v", "x"].includes(event.key.toLowerCase())) {
         event.preventDefault();
+        disqualifyRef.current("COPY_PASTE");
       }
     };
     const preventContextMenu = (event) => event.preventDefault();
@@ -109,6 +120,78 @@ export default function TakeTest() {
       document.removeEventListener("contextmenu", preventContextMenu);
     };
   }, [info, phase]);
+
+    async function disqualify(type) {
+    if (submittedRef.current) return;
+    let data;
+    try {
+      data = await api(`/candidate/${token}/violation`, {
+        method: "POST",
+        body: { type, answers: answersRef.current },
+      });
+    } catch {
+      return;
+    }
+    if (!data.removed) {
+      if (data.count !== undefined) {
+        const what = type === "TAB_SWITCH" ? "left the test tab or window" : "exited fullscreen";
+        setWarning(
+          `Warning: you ${what} (${data.count} of ${data.max} allowed). Doing it again beyond the limit removes you from the test.`,
+        );
+      }
+      return;
+    }
+    if (submittedRef.current) return;
+    submittedRef.current = true;
+    setRemovedReason(type);
+    webcamStream.current?.getTracks().forEach((track) => track.stop());
+    screenStream.current?.getTracks().forEach((track) => track.stop());
+    webcamStream.current = null;
+    screenStream.current = null;
+    if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+    setPhase("removed");
+  }
+
+  useEffect(() => {
+    disqualifyRef.current = disqualify;
+  });
+
+  useEffect(() => {
+    if (phase !== "test") return undefined;
+
+    const fail = (type) => disqualifyRef.current(type);
+    const leave = () => {
+      if (awayRef.current) return;
+      awayRef.current = true;
+      fail("TAB_SWITCH");
+    };
+    const onVisibility = () => {
+      if (document.hidden) leave();
+      else if (document.hasFocus()) awayRef.current = false;
+    };
+    const onBlur = () => {
+      window.setTimeout(() => {
+        if (!blurGuard.current && !document.hasFocus()) leave();
+      }, 500);
+    };
+    const onFocus = () => {
+      if (!document.hidden) awayRef.current = false;
+    };
+    const onFullscreen = () => {
+      if (info?.proctoring.fullscreenRequired && !document.fullscreenElement) fail("FULLSCREEN_EXIT");
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("fullscreenchange", onFullscreen);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("fullscreenchange", onFullscreen);
+    };
+  }, [phase, info]);
 
   function watchMediaStream(stream, kind) {
     const track = stream.getVideoTracks()[0];
@@ -301,7 +384,9 @@ export default function TakeTest() {
       webcamRequired: kind === "webcam",
       screenShareRequired: kind === "screenShare",
     };
+    blurGuard.current = true;
     await requestRequirements(required);
+    blurGuard.current = false;
     setPreparing(false);
   }
 
@@ -479,6 +564,28 @@ export default function TakeTest() {
     );
   }
 
+  if (phase === "removed") {
+    const reasons = {
+      TAB_SWITCH: "you left the test tab or window",
+      FULLSCREEN_EXIT: "you exited fullscreen mode",
+      COPY_PASTE: "you used copy, cut or paste",
+      EARLIER: "a rule was broken earlier",
+    };
+    return (
+      <main className="candidate-shell">
+        <section className="candidate-message-card">
+          <div className="candidate-brand-mark" aria-hidden="true">!</div>
+          <span className="candidate-eyebrow">REMOVED FROM TEST</span>
+          <h1>You have been removed from this test</h1>
+          <p className="candidate-error">Reason: {reasons[removedReason] || "a rule was broken"}.</p>
+          <p className="candidate-muted">
+            Your attempt was submitted and flagged for the administrator.
+          </p>
+        </section>
+      </main>
+    );
+  }
+
   if (phase === "done") {
     return (
       <main className="candidate-shell">
@@ -582,6 +689,34 @@ export default function TakeTest() {
               </div>
             )}
             {error && <p className="candidate-error" role="alert">{error}</p>}
+            <div className="candidate-permission-notice">
+              <strong>Test rules — please read</strong>
+              <ul>
+                                <li>
+                  Do not switch tabs, minimize the browser, or open another window or app.
+                  {info.proctoring.maxTabSwitches > 0
+                    ? ` You get ${info.proctoring.maxTabSwitches} warning(s); the next one removes you.`
+                    : " Doing this removes you immediately."}
+                </li>
+                {info.proctoring.fullscreenRequired && (
+                  <li>
+                    Do not exit fullscreen mode.
+                    {info.proctoring.maxFullscreenExits > 0
+                      ? ` You get ${info.proctoring.maxFullscreenExits} warning(s); the next one removes you.`
+                      : " Doing this removes you immediately."}
+                  </li>
+                )}
+                {info.proctoring.blockCopyPaste && <li>Do not copy, cut or paste (removes you immediately).</li>}
+              </ul>
+              <p className="candidate-permission-copy">
+                Once you go past the allowed warnings, you will be removed from the test.
+                Your attempt will be submitted and flagged.
+              </p>
+              <label className="candidate-answer-option">
+                <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+                <span>I have read and understood the rules above and agree to follow them.</span>
+              </label>
+            </div>
             {info.state === "NOT_OPEN" && (
               <p className="candidate-state-message">
                 This test opens {new Date(info.startsAt).toLocaleString()}.
@@ -595,7 +730,7 @@ export default function TakeTest() {
                 className="candidate-primary-button"
                 type="button"
                 onClick={start}
-                disabled={preparing || missingRequirements.length > 0}
+                disabled={preparing || missingRequirements.length > 0 || !consent}
               >
                 {preparing
                   ? "Checking permissions…"
@@ -660,6 +795,7 @@ export default function TakeTest() {
         inert={permissionBlocked}
         aria-hidden={permissionBlocked}
       >
+        {warning && <p className="candidate-error" role="alert">{warning}</p>}
         <section className="candidate-title-card candidate-active-title">
           <div className="candidate-title-accent" />
           <div className="candidate-title-content">

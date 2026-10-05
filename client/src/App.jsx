@@ -5,6 +5,8 @@ import AptitudeBuilder from "./pages/admin/AptitudeBuilder";
 import AdminGate from "./pages/admin/AdminGate";
 import SessionDetail from "./pages/admin/SessionDetail";
 import TakeTest from "./pages/candidate/TakeTest";
+import JoinTest from "./pages/candidate/JoinTest";
+import NotAllowed from "./pages/candidate/NotAllowed";
 
 
 export default function App() {
@@ -18,6 +20,8 @@ export default function App() {
           <Route path="/admin/sessions/:id" element={<SessionDetail />} />
           <Route path="/admin/sessions/:id/aptitude" element={<AptitudeBuilder />} />
         </Route>
+        <Route path="/join/:shareToken" element={<JoinTest />} />
+        <Route path="/not-allowed" element={<NotAllowed />} />
         <Route path="/test/:token" element={<TakeTest />} />
       <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>

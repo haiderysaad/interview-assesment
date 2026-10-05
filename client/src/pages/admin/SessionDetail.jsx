@@ -98,12 +98,12 @@ export default function SessionDetail() {
     }
   }
 
-  async function copyLink(token) {
-    const link = `${window.location.origin}/test/${token}`;
+  async function copyShareLink() {
+    const link = `${window.location.origin}/join/${session.shareToken}`;
     try {
       await navigator.clipboard.writeText(link);
-      setCopied(token);
-      setTimeout(() => setCopied(""), 1500);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
     } catch {
       window.prompt("Copy this link", link);
     }
@@ -181,6 +181,15 @@ export default function SessionDetail() {
         </div>
       </section>
 
+      <div className="row-tight">
+        <input readOnly value={`${window.location.origin}/join/${session.shareToken}`}
+          onFocus={(e) => e.target.select()} />
+        <button className="btn" type="button" onClick={copyShareLink}>
+          {copied ? "Copied" : "Copy test link"}
+        </button>
+      </div>
+      <p><small>One link for all candidates. They must sign in with a Google email listed below.</small></p>
+
       {session.status !== "CLOSED" && (
         <form className="row" onSubmit={addCandidate}>
           <input placeholder="Candidate name" value={form.name} required
@@ -193,24 +202,22 @@ export default function SessionDetail() {
 
       <table>
         <thead>
-          <tr><th>Candidate</th><th>Status</th><th>Score</th><th>%</th><th>Submitted</th><th>Test link</th></tr>
+          <tr><th>Candidate</th><th>Status</th><th>Score</th><th>%</th><th>Submitted</th></tr>
         </thead>
         <tbody>
           {results.candidates.map((c) => (
             <tr key={c.id}>
               <td>{c.name}<br /><small>{c.email}</small></td>
-              <td>{c.status.replace("_", " ")}{c.autoSubmitted && " (auto)"}</td>
+              <td>
+  {c.status.replace("_", " ")}{c.autoSubmitted && " (auto)"}
+  {c.removedReason && <><br /><small className="error">Removed: {c.removedReason.replace("_", " ")}</small></>}
+</td>
               <td>{c.status === "SUBMITTED" ? `${c.score} / ${c.totalMarks}` : "—"}</td>
               <td>{c.percentage !== null ? `${c.percentage}%` : "—"}</td>
               <td>{c.submittedAt ? new Date(c.submittedAt).toLocaleString() : "—"}</td>
-              <td>
-                <button className="ghost" type="button" onClick={() => copyLink(c.token)}>
-                  {copied === c.token ? "Copied" : "Copy link"}
-                </button>
-              </td>
             </tr>
           ))}
-          {results.candidates.length === 0 && <tr><td colSpan="6">No candidates yet.</td></tr>}
+          {results.candidates.length === 0 && <tr><td colSpan="5">No candidates yet.</td></tr>}
         </tbody>
       </table>
     </div>

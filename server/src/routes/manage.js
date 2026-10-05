@@ -70,7 +70,7 @@ router.get("/:id/results", async (req, res) => {
   const candidates = await prisma.candidate.findMany({
     where: { sessionId: session.id },
     orderBy: { createdAt: "asc" },
-    include: { attempts: true },
+    include: { attempts: true, violations: { where: { meta: { path: ["removed"], equals: true } }, take: 1 } },
   });
 
   const rows = [];
@@ -88,6 +88,7 @@ router.get("/:id/results", async (req, res) => {
       startedAt: a?.startedAt ?? null,
       submittedAt: a?.submittedAt ?? null,
       autoSubmitted: a?.autoSubmitted ?? false,
+      removedReason: c.violations[0]?.type ?? null,
       score: submitted ? a.score : null,
       totalMarks: submitted ? a.totalMarks : null,
       correctCount: submitted ? a.correctCount : null,
