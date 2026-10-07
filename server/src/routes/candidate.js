@@ -1,10 +1,16 @@
 import { Router } from "express";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { OAuth2Client } from "google-auth-library";
 import { GRACE_MS, deadlineOf, cleanAnswers, seededShuffle, finalizeAttempt } from "../attempts.js";
+import { SUPPORTED_LANGUAGES } from "../jdoodle.js";
+import { assembleCandidateCode, extractCandidateCode } from "../technicalCode.js";
 
 const googleClient = new OAuth2Client();
 const limitOf = (value, fallback) => (Number.isInteger(value) && value >= 0 ? value : fallback);
+const hasRequiredRounds = (rounds) =>
+  rounds.some((round) => round.type === "APTITUDE") &&
+  rounds.some((round) => round.type === "TECHNICAL");
 
 // Public routes. Nothing here may ever return `correct`, score or totalMarks.
 const router = Router();
@@ -62,11 +68,23 @@ function testPayload(round, attempt) {
 router.get("/join/:shareToken", async (req, res) => {
   const session = await prisma.interviewSession.findUnique({
     where: { shareToken: req.params.shareToken },
-    select: { title: true, role: true, status: true },
+    select: {
+      title: true,
+      role: true,
+      status: true,
+      rounds: { select: { type: true } },
+    },
   });
   if (!session || session.status === "DRAFT")
     return res.status(404).json({ error: "This test link is not valid" });
-  res.json({ title: session.title, role: session.role });
+  if (!hasRequiredRounds(session.rounds))
+    return res.status(400).json({ error: "This interview link must include both aptitude and technical rounds" });
+  res.json({
+    title: session.title,
+    role: session.role,
+    hasAptitudeRound: session.rounds.some((round) => round.type === "APTITUDE"),
+    hasTechnicalRound: session.rounds.some((round) => round.type === "TECHNICAL"),
+  });
 });
 
 router.post("/join/:shareToken/login", async (req, res) => {
@@ -75,10 +93,16 @@ router.post("/join/:shareToken/login", async (req, res) => {
 
   const session = await prisma.interviewSession.findUnique({
     where: { shareToken: req.params.shareToken },
-    select: { id: true, status: true },
+    select: {
+      id: true,
+      status: true,
+      rounds: { select: { type: true } },
+    },
   });
   if (!session || session.status === "DRAFT")
     return res.status(404).json({ error: "This test link is not valid" });
+  if (!hasRequiredRounds(session.rounds))
+    return res.status(400).json({ error: "This interview link must include both aptitude and technical rounds" });
 
   let payload;
   try {
@@ -98,7 +122,11 @@ router.post("/join/:shareToken/login", async (req, res) => {
   });
   if (!candidate) return res.status(403).json({ error: "NOT_ALLOWED" });
 
-  res.json({ token: candidate.token });
+  res.json({
+    token: candidate.token,
+    hasAptitudeRound: session.rounds.some((round) => round.type === "APTITUDE"),
+    hasTechnicalRound: session.rounds.some((round) => round.type === "TECHNICAL"),
+  });
 });
 
 router.get("/:token", async (req, res) => {
@@ -175,6 +203,153 @@ router.post("/:token/submit", async (req, res) => {
     await finalizeAttempt({ ...attempt, answers }, round, false);
   }
   res.json({ ok: true }); // deliberately no score
+});
+
+router.get("/:token/technical", async (req, res) => {
+  const candidate = await prisma.candidate.findUnique({
+    where: { token: req.params.token },
+    include: {
+      attempts: true,
+      session: {
+        include: {
+          rounds: {
+            where: { type: { in: ["APTITUDE", "TECHNICAL"] } },
+            select: {
+              id: true,
+              type: true,
+              durationMin: true,
+              _count: { select: { questions: true, technicalQuestions: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!candidate || candidate.session.status === "DRAFT")
+    return res.status(404).json({ error: "This test link is not valid" });
+
+  const aptitudeRound = candidate.session.rounds.find((round) => round.type === "APTITUDE");
+  const technicalRound = candidate.session.rounds.find((round) => round.type === "TECHNICAL");
+  if (!aptitudeRound || !technicalRound)
+    return res.status(404).json({ error: "This assessment does not have both required rounds" });
+
+  const aptitudeAttempt = candidate.attempts.find((attempt) => attempt.roundId === aptitudeRound.id);
+  if (!aptitudeAttempt?.submittedAt)
+    return res.status(403).json({ error: "Complete the aptitude round before opening the technical round" });
+
+  const [roundDetails, submissions] = await Promise.all([
+    prisma.round.findUnique({
+      where: { id: technicalRound.id },
+      include: { technicalQuestions: { orderBy: { order: "asc" } } },
+    }),
+    prisma.technicalSubmission.findMany({
+      where: {
+        candidateId: candidate.id,
+        question: { roundId: technicalRound.id },
+      },
+      select: { questionId: true, language: true, code: true, submittedAt: true },
+    }),
+  ]);
+  const submissionsByQuestion = new Map(submissions.map((submission) => [submission.questionId, submission]));
+  res.json({
+    title: candidate.session.title,
+    role: candidate.session.role,
+    candidateName: candidate.name,
+    technicalDurationMin: technicalRound.durationMin,
+    technicalQuestionCount: technicalRound._count.technicalQuestions,
+    startsAt: candidate.session.startsAt,
+    endsAt: candidate.session.endsAt,
+    languages: SUPPORTED_LANGUAGES,
+    questions: roundDetails.technicalQuestions.map((question) => ({
+      id: question.id,
+      title: question.title,
+      difficulty: question.difficulty,
+      statement: question.statement,
+      inputFormat: question.inputFormat,
+      outputFormat: question.outputFormat,
+      starterCode: question.starterCode,
+      constraints: question.constraints,
+      examples: question.examples,
+      marks: question.marks,
+      existingSubmission: (() => {
+        const submission = submissionsByQuestion.get(question.id);
+        return submission
+          ? {
+              language: submission.language,
+              candidateCode: extractCandidateCode(
+                question.starterCode,
+                submission.language,
+                submission.code,
+              ),
+              submittedAt: submission.submittedAt,
+            }
+          : null;
+      })(),
+    })),
+  });
+});
+
+router.put("/:token/technical/submissions", async (req, res) => {
+  const candidate = await prisma.candidate.findUnique({
+    where: { token: req.params.token },
+    include: {
+      attempts: true,
+      session: { include: { rounds: { where: { type: { in: ["APTITUDE", "TECHNICAL"] } } } } },
+    },
+  });
+  if (!candidate || candidate.session.status === "DRAFT")
+    return res.status(404).json({ error: "This test link is not valid" });
+  if (candidate.session.status !== "PUBLISHED")
+    return res.status(403).json({ error: "This interview is closed" });
+  const now = Date.now();
+  if (now < candidate.session.startsAt.getTime() || now > candidate.session.endsAt.getTime())
+    return res.status(403).json({ error: "This interview is not currently open" });
+
+  const aptitudeRound = candidate.session.rounds.find((round) => round.type === "APTITUDE");
+  const technicalRound = candidate.session.rounds.find((round) => round.type === "TECHNICAL");
+  if (!aptitudeRound || !technicalRound)
+    return res.status(400).json({ error: "This assessment does not have both required rounds" });
+  const aptitudeAttempt = candidate.attempts.find((attempt) => attempt.roundId === aptitudeRound?.id);
+  if (!aptitudeAttempt?.submittedAt)
+    return res.status(403).json({ error: "Complete the aptitude round before submitting technical answers" });
+
+  const { questionId, language, candidateCode } = req.body ?? {};
+  console.log("Technical submit language:", language);
+  if (typeof questionId !== "string" || !questionId)
+    return res.status(400).json({ error: "Choose a technical question" });
+  if (!SUPPORTED_LANGUAGES.includes(language))
+    return res.status(400).json({ error: "Choose a supported programming language" });
+  if (typeof candidateCode !== "string" || !candidateCode.trim())
+    return res.status(400).json({ error: "Code cannot be empty" });
+  if (candidateCode.length > 50_000)
+    return res.status(413).json({ error: "Code is too large to submit (maximum 50 KB)" });
+
+  const question = await prisma.technicalQuestion.findFirst({
+    where: { id: questionId, roundId: technicalRound.id },
+    select: { id: true, starterCode: true },
+  });
+  if (!question) return res.status(404).json({ error: "Technical question not found" });
+  const code = assembleCandidateCode(question.starterCode, language, candidateCode);
+  if (code.length > 50_000)
+    return res.status(413).json({ error: "Complete program is too large to submit (maximum 50 KB)" });
+
+  const submission = await prisma.technicalSubmission.upsert({
+    where: { candidateId_questionId: { candidateId: candidate.id, questionId } },
+    create: { candidateId: candidate.id, questionId, language, code },
+    update: {
+      language,
+      code,
+      submittedAt: new Date(),
+      evaluation: Prisma.DbNull,
+      evaluatedAt: null,
+      suggestedCode: null,
+      suggestedAt: null,
+      suggestionNote: null,
+      suggestionChanged: null,
+    },
+    select: { questionId: true, language: true, submittedAt: true },
+  });
+  res.json({ ok: true, submission });
 });
 
 const VIOLATION_TYPES = ["TAB_SWITCH", "FULLSCREEN_EXIT", "COPY_PASTE"];

@@ -17,7 +17,7 @@ export default function CreateSession() {
   });
   const [rounds, setRounds] = useState({
     APTITUDE: { on: true, durationMin: 30 },
-    TECHNICAL: { on: false, durationMin: 60 },
+    TECHNICAL: { on: true, durationMin: 60 },
     AI_INTERVIEW: { on: false, durationMin: 20 },
   });
   const [proctoring, setProctoring] = useState({
@@ -53,10 +53,15 @@ export default function CreateSession() {
       const aptitudeRound = session.rounds.find(
         (round) => round.type === "APTITUDE",
       );
+      const technicalRound = session.rounds.find(
+        (round) => round.type === "TECHNICAL",
+      );
       navigate(
         aptitudeRound
           ? `/admin/sessions/${session.id}/aptitude`
-          : "/admin",
+          : technicalRound
+            ? `/admin/sessions/${session.id}/technical`
+            : "/admin",
       );
     } catch (err) {
       setError(err.message);
@@ -79,13 +84,14 @@ export default function CreateSession() {
         <label>Closes at<input type="datetime-local" name="endsAt" value={form.endsAt} onChange={setField} required /></label>
       </div>
 
-      <h2>Rounds (in order)</h2>
+      <h2>Required rounds: aptitude, then technical</h2>
       {ROUND_TYPES.map((r) => (
         <div className="row" key={r.type}>
           <label className="check">
             <input
               type="checkbox"
               checked={rounds[r.type].on}
+              disabled={r.type === "APTITUDE" || r.type === "TECHNICAL"}
               onChange={(e) => setRounds({ ...rounds, [r.type]: { ...rounds[r.type], on: e.target.checked } })}
             />
             {r.label}

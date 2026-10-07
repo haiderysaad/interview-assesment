@@ -88,10 +88,16 @@ export default function JoinTest() {
   return (
     <main className="candidate-shell">
       <section className="candidate-message-card">
-        <span className="candidate-eyebrow">APTITUDE ASSESSMENT</span>
+        <span className="candidate-eyebrow">
+          {info.hasAptitudeRound && info.hasTechnicalRound
+            ? "INTERVIEW ASSESSMENT"
+            : info.hasTechnicalRound
+              ? "TECHNICAL ASSESSMENT"
+              : "APTITUDE ASSESSMENT"}
+        </span>
         <h1>{info.title}</h1>
         <p className="candidate-muted">{info.role}</p>
-        <p>Sign in with the Google account you were invited with.</p>
+        <p>Sign in with the Google account you were invited with. This sign-in covers both rounds.</p>
         <div ref={buttonRef} style={{ display: "flex", justifyContent: "center", margin: "16px 0" }} />
         {busy && <p className="candidate-muted" role="status">Checking your access…</p>}
         {error && <p className="candidate-error" role="alert">{error}</p>}

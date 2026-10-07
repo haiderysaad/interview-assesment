@@ -52,6 +52,8 @@ export default function AdminGate() {
       ? "Create a session"
       : location.pathname.includes("/aptitude")
         ? "Question builder"
+        : location.pathname.includes("/technical")
+          ? "Technical round"
         : location.pathname === "/admin"
           ? "Overview"
           : "Session details";

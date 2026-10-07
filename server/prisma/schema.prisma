@@ -50,6 +50,7 @@ model Round {
   shuffleQuestions Boolean @default(false)
   shuffleOptions   Boolean @default(false)
   questions   AptitudeQuestion[]
+  technicalQuestions TechnicalQuestion[]
   attempts    Attempt[]
 
   @@unique([sessionId, order])
@@ -68,6 +69,45 @@ model AptitudeQuestion {
   negativeMarks Float    @default(0)
 }
 
+model TechnicalQuestion {
+  id          String   @id @default(uuid())
+  roundId     String
+  round       Round    @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  order       Int      @default(0)
+  title       String
+  difficulty  String   @default("MEDIUM")
+  statement   String
+  inputFormat String   @default("")
+  outputFormat String  @default("")
+  starterCode Json     @default("{}")
+  constraints String[] @default([])
+  examples    Json     @default("[]")
+  testCases   Json     @default("[]")
+  marks       Int      @default(100)
+  submissions TechnicalSubmission[]
+
+  @@unique([roundId, order])
+}
+
+model TechnicalSubmission {
+  id          String           @id @default(uuid())
+  candidateId String
+  candidate   Candidate        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  questionId  String
+  question    TechnicalQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  language    String
+  code        String
+  submittedAt DateTime         @default(now())
+  suggestedCode String?
+  suggestedAt DateTime?
+  suggestionNote String?
+  suggestionChanged Boolean?
+  evaluation  Json?
+  evaluatedAt DateTime?
+
+  @@unique([candidateId, questionId])
+}
+
 model Candidate {
   id         String           @id @default(uuid())
   sessionId  String
@@ -78,6 +118,7 @@ model Candidate {
   createdAt  DateTime         @default(now())
   violations Violation[]
   attempts   Attempt[]
+  technicalSubmissions TechnicalSubmission[]
 
   @@unique([sessionId, email])
 }

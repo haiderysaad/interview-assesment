@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../api";
 
 const fmt = (seconds) =>
@@ -22,6 +22,7 @@ function hasLiveVideo(stream) {
 
 export default function TakeTest() {
   const { token } = useParams();
+  const navigate = useNavigate();
   const [info, setInfo] = useState(null);
   const [test, setTest] = useState(null);
   const [answers, setAnswers] = useState({});
@@ -52,9 +53,13 @@ export default function TakeTest() {
     api(`/candidate/${token}`)
       .then((data) => {
         if (!active) return;
+        if (data.state === "SUBMITTED" && !data.removed) {
+          navigate(`/test/${token}/technical`, { replace: true });
+          return;
+        }
         setInfo(data);
         if (data.removed) setRemovedReason("EARLIER");
-        setPhase(data.removed ? "removed" : data.state === "SUBMITTED" ? "done" : "intro");
+        setPhase(data.removed ? "removed" : "intro");
       })
       .catch((loadError) => {
         if (!active) return;
@@ -65,7 +70,7 @@ export default function TakeTest() {
     return () => {
       active = false;
     };
-  }, [token]);
+  }, [token, navigate]);
 
   useEffect(
     () => () => {
@@ -418,7 +423,7 @@ export default function TakeTest() {
       if (document.fullscreenElement) {
         await document.exitFullscreen().catch(() => {});
       }
-      setPhase("done");
+      navigate(`/test/${token}/technical`, { replace: true });
     } catch (submitError) {
       submittedRef.current = false;
       setError(submitError.message);
@@ -580,23 +585,6 @@ export default function TakeTest() {
           <p className="candidate-error">Reason: {reasons[removedReason] || "a rule was broken"}.</p>
           <p className="candidate-muted">
             Your attempt was submitted and flagged for the administrator.
-          </p>
-        </section>
-      </main>
-    );
-  }
-
-  if (phase === "done") {
-    return (
-      <main className="candidate-shell">
-        <section className="candidate-message-card candidate-thank-you">
-          <div className="candidate-brand-mark" aria-hidden="true">✓</div>
-          <span className="candidate-eyebrow">RESPONSE RECORDED</span>
-          <h1>Thank you{info ? `, ${info.candidateName}` : ""}</h1>
-          <p>Your answers have been submitted successfully.</p>
-          <p className="candidate-muted">
-            You can close this window now. Your result will be available to the
-            test administrator.
           </p>
         </section>
       </main>

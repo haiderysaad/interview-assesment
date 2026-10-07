@@ -569,7 +569,15 @@ export default function AptitudeBuilder() {
         )}
 
         <footer className="aptitude-form-footer">
-          <Link to="/admin">Back to sessions</Link>
+          {session.rounds.some((item) => item.type === "TECHNICAL") &&
+          questions.length > 0 &&
+          !dirty ? (
+            <Link className="technical-next-link" to={`/admin/sessions/${id}/technical`}>
+              Continue to technical round <span aria-hidden="true">→</span>
+            </Link>
+          ) : (
+            <Link to="/admin">Back to sessions</Link>
+          )}
           <button
             className="aptitude-primary-button"
             type="submit"

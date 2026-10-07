@@ -140,7 +140,12 @@ export default function SessionDetail() {
       <div className="row-tight">
         {session.status === "DRAFT" && (
           <>
-            <Link className="btn" to={`/admin/sessions/${id}/aptitude`}>Edit questions</Link>
+            {session.rounds.some((round) => round.type === "APTITUDE") && (
+              <Link className="btn" to={`/admin/sessions/${id}/aptitude`}>Edit aptitude questions</Link>
+            )}
+            {session.rounds.some((round) => round.type === "TECHNICAL") && (
+              <Link className="btn" to={`/admin/sessions/${id}/technical`}>Edit technical questions</Link>
+            )}
             <button className="btn" type="button" onClick={() => setStatus("PUBLISHED")}>Publish</button>
           </>
         )}
@@ -181,6 +186,18 @@ export default function SessionDetail() {
         </div>
       </section>
 
+      {session.rounds.some((round) => round.type === "TECHNICAL") && (
+        <section className="technical-review-entry">
+          <div>
+            <strong>Technical submissions</strong>
+            <p>Review candidate code, request syntax suggestions, and run submissions against test cases.</p>
+          </div>
+          <Link className="btn" to={`/admin/sessions/${id}/technical-review`}>
+            Open technical review
+          </Link>
+        </section>
+      )}
+
       <div className="row-tight">
         <input readOnly value={`${window.location.origin}/join/${session.shareToken}`}
           onFocus={(e) => e.target.select()} />
@@ -202,10 +219,10 @@ export default function SessionDetail() {
 
       <table>
         <thead>
-          <tr><th>Candidate</th><th>Status</th><th>Score</th><th>%</th><th>Submitted</th></tr>
+          <tr><th>Candidate</th><th>Aptitude status</th><th>Aptitude score</th><th>%</th><th>Tests</th><th>Runtime</th><th>Memory</th><th>Combined</th><th>Rank</th><th>Submitted</th></tr>
         </thead>
         <tbody>
-          {results.candidates.map((c) => (
+          {[...results.candidates].sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999)).map((c) => (
             <tr key={c.id}>
               <td>{c.name}<br /><small>{c.email}</small></td>
               <td>
@@ -214,10 +231,15 @@ export default function SessionDetail() {
 </td>
               <td>{c.status === "SUBMITTED" ? `${c.score} / ${c.totalMarks}` : "—"}</td>
               <td>{c.percentage !== null ? `${c.percentage}%` : "—"}</td>
+              <td>{c.techTotal > 0 ? `${c.techPassed} / ${c.techTotal}` : "Not evaluated"}</td>
+              <td>{c.techTotal > 0 ? `${Number(c.techRuntime).toFixed(3)}s` : "—"}</td>
+              <td>{c.techTotal > 0 ? c.techMemory : "—"}</td>
+              <td>{c.combined !== null ? `${c.combined}%` : "—"}</td>
+              <td>{c.rank ? `#${c.rank}` : "—"}</td>
               <td>{c.submittedAt ? new Date(c.submittedAt).toLocaleString() : "—"}</td>
             </tr>
           ))}
-          {results.candidates.length === 0 && <tr><td colSpan="5">No candidates yet.</td></tr>}
+          {results.candidates.length === 0 && <tr><td colSpan="10">No candidates yet.</td></tr>}
         </tbody>
       </table>
     </div>

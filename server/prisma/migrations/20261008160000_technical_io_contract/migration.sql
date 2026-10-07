@@ -1,0 +1,3 @@
+ALTER TABLE "TechnicalQuestion"
+ADD COLUMN "inputFormat" TEXT NOT NULL DEFAULT '',
+ADD COLUMN "outputFormat" TEXT NOT NULL DEFAULT '';
